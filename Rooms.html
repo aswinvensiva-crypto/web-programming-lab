@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rooms – Hotel Manager</title>
+<link rel="stylesheet" href="_shared.css" />
+<style>
+  .rooms-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .room-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; transition:transform .2s,border-color .2s; border-left-width:4px; }
+  .room-card:hover { transform:translateY(-3px); border-color:var(--primary); }
+  .room-card-header { padding:18px 18px 12px; display:flex; justify-content:space-between; align-items:flex-start; }
+  .room-number { font-family:'Playfair Display',serif; font-size:20px; font-weight:800; }
+  .room-name { font-size:13px; color:var(--muted); margin-top:2px; }
+  .room-card-body { padding:0 18px 18px; }
+  .room-detail { font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .room-price { font-family:'Playfair Display',serif; font-size:22px; font-weight:800; color:var(--primary); margin:8px 0; }
+  .room-revenue { font-size:12px; color:var(--muted); margin-bottom:14px; }
+  .cat-section { margin-bottom:28px; }
+  .cat-header { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .dot-available { background:var(--success); box-shadow:0 0 8px var(--success); }
+  .dot-maintenance { background:var(--warning); box-shadow:0 0 8px var(--warning); }
+  .dot-unavailable { background:var(--danger); box-shadow:0 0 8px var(--danger); }
+</style>
+</head>
+<body>
+<script src="_sidebar.js"></script>
+<script>injectSidebar('Rooms');</script>
+
+<main class="main">
+  <div class="page-header">
+    <div><div class="page-title">Rooms Management</div></div>
+    <button class="btn btn-primary" onclick="openDialog()">➕ Add Room</button>
+  </div>
+
+  <div id="rooms-container"></div>
+</main>
+
+<!-- Dialog -->
+<div class="overlay" id="dialog-overlay">
+  <div class="dialog">
+    <div class="dialog-title" id="dialog-title">Add New Room</div>
+    <form onsubmit="handleSave(event)">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Room Number *</label><input class="form-input" id="f-number" required /></div>
+        <div class="form-group"><label class="form-label">Room Name *</label><input class="form-input" id="f-name" required /></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Capacity *</label><input type="number" class="form-input" id="f-capacity" min="1" value="1" required /></div>
+        <div class="form-group"><label class="form-label">Price/Day (₹) *</label><input type="number" class="form-input" id="f-price" min="0" step="0.01" required /></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category *</label>
+        <select class="form-select" id="f-category">
+          <option value="standard">Standard</option>
+          <option value="deluxe">Deluxe</option>
+          <option value="ultra_deluxe">Ultra Deluxe</option>
+          <option value="suite">Suite</option>
+          <option value="presidential">Presidential</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status *</label>
+        <select class="form-select" id="f-status">
+          <option value="available">Available</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="unavailable">Unavailable</option>
+        </select>
+      </div>
+      <div class="flex-gap" style="margin-top:8px">
+        <button type="submit" class="btn btn-primary" id="save-btn">Create</button>
+        <button type="button" class="btn btn-outline" onclick="closeDialog()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let rooms = [
+  { id:1, number:'101', name:'Presidential Suite', capacity:4, price:3200, status:'available', category:'presidential', revenue:280000 },
+  { id:2, number:'201', name:'Ocean View Suite', capacity:3, price:2100, status:'available', category:'suite', revenue:195000 },
+  { id:3, number:'202', name:'Garden Suite', capacity:2, price:1950, status:'maintenance', category:'suite', revenue:142000 },
+  { id:4, number:'301', name:'Deluxe King', capacity:2, price:1400, status:'available', category:'deluxe', revenue:145000 },
+  { id:5, number:'401', name:'Ultra Deluxe Twin', capacity:2, price:1100, status:'available', category:'ultra_deluxe', revenue:132000 },
+  { id:6, number:'501', name:'Standard Double', capacity:2, price:700, status:'available', category:'standard', revenue:93200 },
+  { id:7, number:'502', name:'Standard Single', capacity:1, price:550, status:'unavailable', category:'standard', revenue:68000 },
+];
+let nextId = 8;
+let editingId = null;
+
+const categories = [
+  { value:'presidential', label:'Presidential', color:'linear-gradient(135deg,#d97706,#f59e0b)' },
+  { value:'suite', label:'Suite', color:'linear-gradient(135deg,#7c3aed,#8b5cf6)' },
+  { value:'ultra_deluxe', label:'Ultra Deluxe', color:'linear-gradient(135deg,#2563eb,#3b82f6)' },
+  { value:'deluxe', label:'Deluxe', color:'linear-gradient(135deg,#059669,#10b981)' },
+  { value:'standard', label:'Standard', color:'linear-gradient(135deg,#475569,#64748b)' },
+];
+
+const statusDot = { available:'dot-available', maintenance:'dot-maintenance', unavailable:'dot-unavailable' };
+
+function fmt(n) { return '₹' + Number(n).toLocaleString('en-IN'); }
+
+function render() {
+  const container = document.getElementById('rooms-container');
+  let html = '';
+  categories.forEach(cat => {
+    const catRooms = rooms.filter(r => r.category === cat.value);
+    if (!catRooms.length) return;
+    html += `<div class="cat-section">
+      <div class="cat-header">
+        <span class="badge" style="background:${cat.color};color:#fff;font-size:12px">${cat.label}</span>
+        <span style="font-size:13px;color:var(--muted)">(${catRooms.length} rooms)</span>
+      </div>
+      <div class="rooms-grid">
+        ${catRooms.map(r => `
+          <div class="room-card" style="border-left-color:${cat.value==='presidential'?'#f59e0b':cat.value==='suite'?'#8b5cf6':cat.value==='ultra_deluxe'?'#3b82f6':cat.value==='deluxe'?'#10b981':'#64748b'}">
+            <div class="room-card-header">
+              <div>
+                <div class="room-number">${r.number}</div>
+                <div class="room-name">${r.name}</div>
+              </div>
+              <div class="flex-gap" style="gap:6px">
+                <div class="status-dot ${statusDot[r.status]}"></div>
+                <span class="badge ${r.status==='available'?'badge-success':r.status==='maintenance'?'badge-warning':'badge-danger'}" style="font-size:11px">${r.status}</span>
+              </div>
+            </div>
+            <div class="room-card-body">
+              <div class="room-detail">👥 Capacity: ${r.capacity} person(s)</div>
+              <div class="room-price">${fmt(r.price)}/day</div>
+              <div class="room-revenue">Total Revenue: ${fmt(r.revenue)}</div>
+              <div class="flex-gap">
+                <button class="btn btn-outline btn-sm" style="flex:1" onclick="editRoom(${r.id})">✏️ Edit</button>
+                <button class="btn btn-ghost btn-sm" style="flex:1;color:var(--danger)" onclick="deleteRoom(${r.id})">🗑️ Delete</button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html || `<div class="empty-state"><div class="icon">🛏️</div><p>No rooms found. Add your first room.</p></div>`;
+}
+
+function openDialog(id = null) {
+  editingId = id;
+  const r = id ? rooms.find(x => x.id === id) : null;
+  document.getElementById('dialog-title').textContent = id ? 'Edit Room' : 'Add New Room';
+  document.getElementById('save-btn').textContent = id ? 'Update' : 'Create';
+  document.getElementById('f-number').value = r?.number || '';
+  document.getElementById('f-name').value = r?.name || '';
+  document.getElementById('f-capacity').value = r?.capacity || 1;
+  document.getElementById('f-price').value = r?.price || '';
+  document.getElementById('f-category').value = r?.category || 'standard';
+  document.getElementById('f-status').value = r?.status || 'available';
+  document.getElementById('dialog-overlay').classList.add('open');
+}
+function closeDialog() { document.getElementById('dialog-overlay').classList.remove('open'); editingId = null; }
+function editRoom(id) { openDialog(id); }
+function deleteRoom(id) {
+  if (!confirm('Delete this room?')) return;
+  rooms = rooms.filter(r => r.id !== id);
+  render();
+}
+function handleSave(e) {
+  e.preventDefault();
+  const data = {
+    number: document.getElementById('f-number').value,
+    name: document.getElementById('f-name').value,
+    capacity: parseInt(document.getElementById('f-capacity').value),
+    price: parseFloat(document.getElementById('f-price').value),
+    category: document.getElementById('f-category').value,
+    status: document.getElementById('f-status').value,
+  };
+  if (editingId) {
+    rooms = rooms.map(r => r.id === editingId ? { ...r, ...data } : r);
+  } else {
+    rooms.push({ ...data, id: nextId++, revenue: 0 });
+  }
+  closeDialog();
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

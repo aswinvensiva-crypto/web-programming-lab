@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Customers – Hotel Manager</title>
+<link rel="stylesheet" href="_shared.css" />
+<style>
+  .contact-line { display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:4px; }
+  .contact-icon { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+</style>
+</head>
+<body>
+<script src="_sidebar.js"></script>
+<script>injectSidebar('Customers');</script>
+
+<main class="main">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Customers</div>
+      <div class="page-subtitle">Manage your guest database</div>
+    </div>
+    <button class="btn btn-primary" onclick="openDialog()">➕ Add Customer</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><div class="card-title">All Customers</div></div>
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th><th>Contact</th><th>Total Bookings</th><th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="customers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Dialog -->
+<div class="overlay" id="dialog-overlay">
+  <div class="dialog">
+    <div class="dialog-title" id="dialog-title">Add New Customer</div>
+    <form onsubmit="handleSave(event)">
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="f-name" required /></div>
+      <div class="form-group"><label class="form-label">Phone *</label><input class="form-input" id="f-phone" required /></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" id="f-email" /></div>
+      <div class="form-group"><label class="form-label">Address</label><input class="form-input" id="f-address" /></div>
+      <div class="flex-gap" style="margin-top:8px">
+        <button type="submit" class="btn btn-primary" id="save-btn">Create</button>
+        <button type="button" class="btn btn-outline" onclick="closeDialog()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let customers = [
+  { id:1, name:'Aravind Sharma', phone:'9876543210', email:'aravind@email.com', address:'Chennai, TN', bookings:8 },
+  { id:2, name:'Priya Nair', phone:'9123456789', email:'priya@email.com', address:'Coimbatore, TN', bookings:4 },
+  { id:3, name:'Rajan Mehta', phone:'9988776655', email:'', address:'Mumbai, MH', bookings:12 },
+  { id:4, name:'Sowmya Krishnan', phone:'9345678901', email:'sowmya@email.com', address:'Bengaluru, KA', bookings:6 },
+  { id:5, name:'Vikram Patel', phone:'9234567890', email:'vikram@email.com', address:'Hyderabad, TS', bookings:2 },
+];
+let editingId = null;
+let nextId = 6;
+
+function render() {
+  const tbody = document.getElementById('customers-tbody');
+  if (!customers.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="icon">👥</div><p>No customers found.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = customers.map(c => `
+    <tr>
+      <td><strong>${c.name}</strong></td>
+      <td>
+        <div class="contact-line"><div class="contact-icon" style="background:rgba(167,139,250,0.15)">📞</div>${c.phone}</div>
+        ${c.email ? `<div class="contact-line"><div class="contact-icon" style="background:rgba(244,114,182,0.15)">✉️</div><span style="color:var(--muted)">${c.email}</span></div>` : ''}
+        ${c.address ? `<div class="contact-line"><div class="contact-icon" style="background:rgba(52,211,153,0.15)">📍</div><span style="color:var(--muted)">${c.address}</span></div>` : ''}
+      </td>
+      <td><span class="badge badge-primary">${c.bookings} bookings</span></td>
+      <td style="text-align:right">
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="editCustomer(${c.id})" title="Edit">✏️</button>
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="deleteCustomer(${c.id})" title="Delete" style="color:var(--danger)">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openDialog(id = null) {
+  editingId = id;
+  const c = id ? customers.find(x => x.id === id) : null;
+  document.getElementById('dialog-title').textContent = id ? 'Edit Customer' : 'Add New Customer';
+  document.getElementById('save-btn').textContent = id ? 'Update' : 'Create';
+  document.getElementById('f-name').value = c?.name || '';
+  document.getElementById('f-phone').value = c?.phone || '';
+  document.getElementById('f-email').value = c?.email || '';
+  document.getElementById('f-address').value = c?.address || '';
+  document.getElementById('dialog-overlay').classList.add('open');
+}
+
+function closeDialog() { document.getElementById('dialog-overlay').classList.remove('open'); editingId = null; }
+
+function editCustomer(id) { openDialog(id); }
+
+function deleteCustomer(id) {
+  if (!confirm('Delete this customer? This will also delete all their bookings.')) return;
+  customers = customers.filter(c => c.id !== id);
+  render();
+}
+
+function handleSave(e) {
+  e.preventDefault();
+  const data = {
+    name: document.getElementById('f-name').value,
+    phone: document.getElementById('f-phone').value,
+    email: document.getElementById('f-email').value,
+    address: document.getElementById('f-address').value,
+  };
+  if (editingId) {
+    customers = customers.map(c => c.id === editingId ? { ...c, ...data } : c);
+  } else {
+    customers.push({ ...data, id: nextId++, bookings: 0 });
+  }
+  closeDialog();
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
